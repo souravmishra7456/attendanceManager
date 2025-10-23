@@ -3,6 +3,10 @@
 # ------------------------------
 client/node_modules/
 server/node_modules/
+# Next.js build folder
+.next/
+client/.next/
+server/.next/
 
 # ------------------------------
 # Environment variables
