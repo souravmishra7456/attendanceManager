@@ -1,0 +1,56 @@
+# ------------------------------
+# Node.js dependencies
+# ------------------------------
+client/node_modules/
+server/node_modules/
+
+# ------------------------------
+# Environment variables
+# ------------------------------
+client/.env
+server/.env
+
+# ------------------------------
+# Logs
+# ------------------------------
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# ------------------------------
+# OS files
+# ------------------------------
+.DS_Store
+Thumbs.db
+
+# ------------------------------
+# Build outputs / caches
+# ------------------------------
+client/dist/
+client/build/
+server/dist/
+server/build/
+*.cache
+*.tsbuildinfo
+
+# ------------------------------
+# IDE / editor configs
+# ------------------------------
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+
+# ------------------------------
+# Optional: Docker & coverage
+# ------------------------------
+docker-compose.override.yml
+coverage/
+.env.local
+.env.production
+.env.development
