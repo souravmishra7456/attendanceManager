@@ -1,88 +1,138 @@
 import express from "express";
-import Subject from "../models/Subject.js";
+import User from "../models/User.js";
 import { protect } from "../middleware/authMiddleware.js";
 
 const router = express.Router();
 
-// GET all subjects for logged-in user
+/**
+ * GET full timetable for the logged-in user
+ */
 router.get("/", protect, async (req, res) => {
     try {
-        const subjects = await Subject.find({ user: req.user._id });
-        res.json(subjects);
+        const user = await User.findById(req.user._id);
+        if (!user) return res.status(404).json({ message: "User not found" });
+
+        res.json(user.days);
     } catch (err) {
         res.status(500).json({ message: err.message });
     }
 });
 
-// POST: Add new subject
-router.post("/", protect, async (req, res) => {
-    const { name, timetable } = req.body;
+/**
+ * GET subjects for a specific day
+ */
+router.get("/:day", protect, async (req, res) => {
+    const day = req.params.day;
+    try {
+        const user = await User.findById(req.user._id);
+        if (!user) return res.status(404).json({ message: "User not found" });
+
+        res.json({ [day]: user.days[day] || [] });
+    } catch (err) {
+        res.status(500).json({ message: err.message });
+    }
+});
+
+/**
+ * POST: Add new subject for a specific day
+ */
+router.post("/:day", protect, async (req, res) => {
+    const day = req.params.day;
+    const { name, startTime, endTime } = req.body;
 
     try {
-        // Fetch all existing subjects of the user
-        const existingSubjects = await Subject.find({ user: req.user._id });
-
-        // Check for conflicts
-        for (const newSlot of timetable) {
-            for (const subject of existingSubjects) {
-                for (const slot of subject.timetable) {
-                    if (
-                        slot.day === newSlot.day &&
-                        !(
-                            newSlot.endTime <= slot.startTime ||
-                            newSlot.startTime >= slot.endTime
-                        )
-                    ) {
-                        return res
-                            .status(400)
-                            .json({ message: `Time conflict with subject "${subject.name}" on ${slot.day}` });
-                    }
-                }
-            }
+        // Validate time range
+        if (!startTime || !endTime || startTime >= endTime) {
+            return res.status(400).json({
+                message: "Invalid time range — endTime must be greater than startTime",
+            });
         }
 
-        // No conflicts, create subject
-        const newSubject = new Subject({
-            name,
-            timetable,
-            user: req.user._id,
-        });
-        const savedSubject = await newSubject.save();
-        res.status(201).json(savedSubject);
+        const user = await User.findById(req.user._id);
+        if (!user) return res.status(404).json({ message: "User not found" });
+
+        const daySubjects = user.days[day] || [];
+
+        // Conflict check
+        const conflict = daySubjects.find(
+            (slot) =>
+                !(
+                    endTime <= slot.startTime ||
+                    startTime >= slot.endTime
+                )
+        );
+
+        if (conflict) {
+            return res
+                .status(400)
+                .json({ message: `Time conflict with "${conflict.name}" on ${day}` });
+        }
+
+        // Add new subject
+        daySubjects.push({ name, startTime, endTime });
+        user.days[day] = daySubjects;
+
+        await user.save();
+        res.status(201).json(user.days[day]);
     } catch (err) {
         res.status(500).json({ message: err.message });
     }
 });
 
+/**
+ * PUT: Update a subject for a specific day (by index)
+ */
+router.put("/:day/:index", protect, async (req, res) => {
+    const day = req.params.day;
+    const index = parseInt(req.params.index);
+    const { name, startTime, endTime } = req.body;
 
-// PUT: Update subject
-router.put("/:id", protect, async (req, res) => {
     try {
-        const subject = await Subject.findById(req.params.id);
-        if (!subject) return res.status(404).json({ message: "Subject not found" });
-        if (subject.user.toString() !== req.user._id.toString())
-            return res.status(401).json({ message: "Not authorized" });
+        const user = await User.findById(req.user._id);
+        if (!user) return res.status(404).json({ message: "User not found" });
 
-        subject.name = req.body.name || subject.name;
-        subject.timetable = req.body.timetable || subject.timetable;
+        if (!user.days[day] || !user.days[day][index]) {
+            return res.status(404).json({ message: "Subject not found for that day" });
+        }
 
-        const updatedSubject = await subject.save();
-        res.json(updatedSubject);
+        // Validate time range
+        if (startTime && endTime && startTime >= endTime) {
+            return res.status(400).json({
+                message: "Invalid time range — endTime must be greater than startTime",
+            });
+        }
+
+        const subject = user.days[day][index];
+        subject.name = name || subject.name;
+        subject.startTime = startTime || subject.startTime;
+        subject.endTime = endTime || subject.endTime;
+
+        await user.save();
+        res.json(user.days[day]);
     } catch (err) {
         res.status(500).json({ message: err.message });
     }
 });
 
-// DELETE: Remove subject
-router.delete("/:id", protect, async (req, res) => {
-    try {
-        const subject = await Subject.findById(req.params.id);
-        if (!subject) return res.status(404).json({ message: "Subject not found" });
-        if (subject.user.toString() !== req.user._id.toString())
-            return res.status(401).json({ message: "Not authorized" });
+/**
+ * DELETE: Remove subject for a specific day
+ */
+router.delete("/:day/:index", protect, async (req, res) => {
+    const day = req.params.day;
+    const index = parseInt(req.params.index);
 
-        await subject.remove();
-        res.json({ message: "Subject removed" });
+    try {
+        const user = await User.findById(req.user._id);
+        if (!user) return res.status(404).json({ message: "User not found" });
+
+        if (!user.days[day] || !user.days[day][index]) {
+            return res.status(404).json({ message: "Subject not found for that day" });
+        }
+
+        user.days[day].splice(index, 1);
+        await user.save();
+
+        res.json({ message: `Subject removed from ${day}`, timetable: user.days[day] });
     } catch (err) {
         res.status(500).json({ message: err.message });
     }
